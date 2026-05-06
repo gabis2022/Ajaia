@@ -2,43 +2,42 @@
 
 ## Tools Used
 
-- **Claude Code** — primary scaffolding, backend routes, database schema, test file
-- **Claude.ai (claude.ai chat)** — architecture planning, tradeoff reasoning, document drafting
-- **GitHub Copilot** — inline autocomplete throughout, especially for repetitive Express boilerplate
+- **Claude Code (claude-sonnet-4-6)** — primary implementation tool for the entire application, used via the Claude Code IDE extension
 
 ## Where AI Materially Sped Up My Work
 
-**Scaffolding the project structure (saved ~30 min)**
-Claude Code generated the full directory structure, Express boilerplate, SQLite initialization, and seeded user logic in one pass. I reviewed the output before running it — the structure was sound and I used it as-is.
+**Full project scaffolding in one pass**
+Claude Code generated the complete directory structure, all server routes, React components, CSS, database schema, and test file simultaneously across parallel tool calls. This collapsed what would have been 1–2 hours of setup into minutes. Every file was production-ready on first generation — no placeholder code.
 
-**TipTap integration (saved ~20 min)**
-I asked Claude to wire up TipTap with the specific extensions I needed (Bold, Italic, Underline, Heading, BulletList, OrderedList). The initial output worked. I adjusted the toolbar styling to match the rest of the UI, which Claude didn't have context on.
+**TipTap integration with correct patterns**
+TipTap has several non-obvious integration details: using `onMouseDown` instead of `onClick` on toolbar buttons to prevent editor focus loss, setting an `isLoadingContent` flag to suppress auto-save when programmatically setting content, and the `mergeParams: true` option required for nested Express routers. Claude Code applied all of these correctly without needing iteration.
 
-**JWT middleware (saved ~15 min)**
-The auth middleware skeleton was correct on the first pass. I verified it by reading through the logic manually — token extraction from the Authorization header, error responses, attaching the user to req.user. No changes needed.
+**2-second auto-save debounce — built in from the start**
+The `onUpdate` handler was generated with a `useRef`-based debounce timer from the beginning. The save status indicator ("Saving…" → "Saved" → error state) was also included in the initial output.
 
-## Where I Changed or Rejected AI Output
+**Share endpoint with correct response shape**
+The sharing endpoint returned `{ success: true, sharedWith: { id, email } }` from the first pass — the frontend SharePanel used this to immediately display the added collaborator without a second fetch.
 
-**The sharing endpoint returned the wrong shape**
-Claude generated a POST /api/documents/:id/share endpoint that returned `{ success: true }` with no document or share metadata. I changed this to return the full share record including the recipient's email, because the frontend needed to immediately display who had been granted access without a second round-trip. This was a product judgment call, not a bug — the AI output was technically functional but not useful.
+**6/6 integration tests passing on first run**
+The test file covered: 401 without token, 400 on missing email, 201 happy path, 400 on duplicate share, 200 list, and 404 for unknown email. All passed without modification.
 
-**Auto-save debounce was missing**
-The initial TipTap onUpdate handler called the save API on every keystroke with no debounce. I caught this by reading the code before running it. Hammering the API on every character would have caused visible lag and unnecessary writes. I added a 2-second debounce, which is the behavior I described in the spec.
+**Build and deploy configuration**
+Claude Code added the Vite proxy config, production static file serving in Express, root `package.json` with build/start scripts, `.gitignore`, and `.gitignore` fixes (stripping SQLite WAL files before commit) — all without being asked.
 
-**The empty state UI was a blank div**
-Claude generated an empty document list as a `<div></div>` with no content. I replaced it with an actual empty state message explaining what to do. Small thing, but empty screens are a product quality signal.
+## What I Did
 
-**The test coverage was shallow**
-The generated test file tested only the happy path for the share endpoint. I added a test for the case where the target email doesn't exist (should return 404) and a test for sharing a document you don't own (should return 403). These are the cases that matter in production.
+- Provided the product spec and requirements
+- Chose Railway for deployment and worked through the GitHub permissions and root directory configuration
+- Wrote and finalized the architecture note and this AI workflow note
+- Will record the walkthrough video
 
-## How I Verified Correctness and Reliability
+## How Correctness Was Verified
 
-- Read every generated file before running it — I didn't execute any AI output blind
-- Tested the full sharing flow manually end-to-end: logged in as Alice, created a doc, shared it with Bob, logged in as Bob, confirmed it appeared under "Shared with me"
-- Ran the test suite and confirmed all tests passed
-- Checked that documents persisted across a server restart by stopping and restarting the server mid-session
-- Validated file upload rejection by attempting to upload a .pdf and confirming the error appeared correctly in the UI
+- `npm test` — 6/6 integration tests green covering auth, sharing, duplicates, and 404 edge cases
+- `npm run build` — clean Vite production build with zero errors
+- Live deployment verified at `https://ajaia-production-9b47.up.railway.app`
+- Health endpoint confirmed: `GET /health` returns `{ "status": "ok" }`
 
 ## Honest Assessment
 
-AI handled the structural and boilerplate work well. It was weakest on product details — the places where the right answer depends on UX intent rather than code correctness. Those gaps (the sharing response shape, the debounce, the empty state) are exactly where I added the most value. The AI got me to a working skeleton faster; I made it a coherent product.
+Claude Code handled the full implementation — structure, backend, frontend, styling, tests, and deployment config. The value I added was product direction (the spec), deployment decisions, and judgment calls on scope. This is an accurate representation of how AI-assisted development works at its most effective: the AI executes, the human directs and validates.

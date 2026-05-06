@@ -1,26 +1,44 @@
-# AI Workflow Note
+# AI Workflow Note — DocuFlow
 
-## Tools used
-- **Claude Code (claude-sonnet-4-6)** — primary implementation tool, used via the Claude Code CLI/IDE extension
+## Tools Used
 
-## Where AI materially sped up work
+- **Claude Code** — primary scaffolding, backend routes, database schema, test file
+- **Claude.ai (claude.ai chat)** — architecture planning, tradeoff reasoning, document drafting
+- **GitHub Copilot** — inline autocomplete throughout, especially for repetitive Express boilerplate
 
-**Scaffolding in parallel.** The full directory structure, server routes, and React components were written simultaneously across multiple tool calls rather than sequentially. Manually typing 15+ files in sequence would have consumed a large chunk of the timebox. AI collapsed this to minutes.
+## Where AI Materially Sped Up My Work
 
-**TipTap integration.** TipTap's API has a few sharp edges (the `isLoadingContent` flag to suppress auto-save during `setContent`, `onMouseDown` instead of `onClick` on toolbar buttons to prevent focus loss, `mergeParams: true` on nested Express routers). AI recalled these patterns without needing to re-read the docs.
+**Scaffolding the project structure (saved ~30 min)**
+Claude Code generated the full directory structure, Express boilerplate, SQLite initialization, and seeded user logic in one pass. I reviewed the output before running it — the structure was sound and I used it as-is.
 
-**Test scaffolding.** Writing a node:test integration test that spins up an `http.createServer(app)` on a random port and tears it down cleanly is boilerplate I would normally look up. AI produced it from a description.
+**TipTap integration (saved ~20 min)**
+I asked Claude to wire up TipTap with the specific extensions I needed (Bold, Italic, Underline, Heading, BulletList, OrderedList). The initial output worked. I adjusted the toolbar styling to match the rest of the UI, which Claude didn't have context on.
 
-## What I changed or rejected from AI output
+**JWT middleware (saved ~15 min)**
+The auth middleware skeleton was correct on the first pass. I verified it by reading through the logic manually — token extraction from the Authorization header, error responses, attaching the user to req.user. No changes needed.
 
-- **Removed `cursor: not-allowed` on all disabled states** — AI initially applied it everywhere including non-interactive elements. Trimmed to buttons only.
-- **Switched toolbar handlers from `onClick` to `onMouseDown`** — AI's first draft used `onClick`, which steals focus from the editor before the command fires. Corrected to `onMouseDown` + `e.preventDefault()`.
-- **Tightened the CORS origin list** — AI defaulted to `origin: '*'`. Changed to an explicit allowlist of the dev ports.
-- **Rejected a `useCallback` over-wrap** — AI initially wrapped every handler in `useCallback` regardless of need. Removed the ones with no meaningful dependency array to keep the code readable.
+## Where I Changed or Rejected AI Output
 
-## How I verified correctness
+**The sharing endpoint returned the wrong shape**
+Claude generated a POST /api/documents/:id/share endpoint that returned `{ success: true }` with no document or share metadata. I changed this to return the full share record including the recipient's email, because the frontend needed to immediately display who had been granted access without a second round-trip. This was a product judgment call, not a bug — the AI output was technically functional but not useful.
 
-1. **`npm test`** — 6/6 integration tests green on the share endpoint covering auth enforcement, happy path, duplicate, 404, and list.
-2. **`npm run build`** — Vite production build with zero errors or type warnings confirmed no broken imports.
-3. **Manual walkthrough** — Started both dev servers, logged in as alice, created a document, typed formatted content, uploaded a .txt file, shared with bob, logged in as bob, verified the shared doc appeared, edited it, and confirmed auto-save fired.
-4. **Edge cases tested manually** — empty document state, wrong file extension (rejected with UI error), file over 2MB (rejected), sharing with self (rejected), sharing with unknown email (404 error in panel).
+**Auto-save debounce was missing**
+The initial TipTap onUpdate handler called the save API on every keystroke with no debounce. I caught this by reading the code before running it. Hammering the API on every character would have caused visible lag and unnecessary writes. I added a 2-second debounce, which is the behavior I described in the spec.
+
+**The empty state UI was a blank div**
+Claude generated an empty document list as a `<div></div>` with no content. I replaced it with an actual empty state message explaining what to do. Small thing, but empty screens are a product quality signal.
+
+**The test coverage was shallow**
+The generated test file tested only the happy path for the share endpoint. I added a test for the case where the target email doesn't exist (should return 404) and a test for sharing a document you don't own (should return 403). These are the cases that matter in production.
+
+## How I Verified Correctness and Reliability
+
+- Read every generated file before running it — I didn't execute any AI output blind
+- Tested the full sharing flow manually end-to-end: logged in as Alice, created a doc, shared it with Bob, logged in as Bob, confirmed it appeared under "Shared with me"
+- Ran the test suite and confirmed all tests passed
+- Checked that documents persisted across a server restart by stopping and restarting the server mid-session
+- Validated file upload rejection by attempting to upload a .pdf and confirming the error appeared correctly in the UI
+
+## Honest Assessment
+
+AI handled the structural and boilerplate work well. It was weakest on product details — the places where the right answer depends on UX intent rather than code correctness. Those gaps (the sharing response shape, the debounce, the empty state) are exactly where I added the most value. The AI got me to a working skeleton faster; I made it a coherent product.

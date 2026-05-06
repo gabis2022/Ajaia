@@ -1,52 +1,64 @@
-# Architecture Notes
+# Architecture Note — DocuFlow
 
-## What I prioritized and why
+## What I Built
 
-### Editor-first depth over breadth
-TipTap was chosen because it wraps ProseMirror behind a clean React API and ships StarterKit with everything needed (bold, italic, headings, lists) in a single bundle. Adding Underline required only one extra extension. This let me spend time on the editing UX rather than editor wiring.
+A lightweight full-stack document editor with rich-text editing, file import, and basic sharing. The stack is React + Vite on the frontend, Express + better-sqlite3 on the backend, with TipTap as the editor library.
 
-### SQLite over Postgres
-For a single-reviewer demo, `better-sqlite3` gives zero-config persistence — no Docker, no connection strings, no migration tooling. The synchronous API also simplifies Express route handlers (no async/await noise in CRUD paths). The schema is simple enough that switching to Postgres later would be a one-file change.
+## Core Decisions
 
-### JWT in localStorage vs cookies
-Simpler for a demo with two hardcoded users. In production I'd use HttpOnly cookies to prevent XSS token theft.
+### Editor: TipTap over Quill or Slate
 
-### Vite proxy to avoid CORS
-Rather than open-ended CORS on the server, the Vite dev server proxies `/api/*` to `localhost:3001`. This is the standard production pattern too — a reverse proxy (nginx/Caddy) in front of both services.
+TipTap stores document content as ProseMirror JSON rather than HTML. This made persistence simpler (store the JSON blob, restore it exactly) and sidesteps XSS concerns that come with storing raw HTML. The tradeoff is a slightly larger bundle, which is acceptable for this scope.
 
-### Auto-save with debounce (2s)
-TipTap's `onUpdate` fires on every keystroke. A 2-second debounce keeps the server call rate low while still feeling responsive. A loading flag (`isLoadingContent`) prevents the debounce from firing when we programmatically set content on document load.
+### Storage: SQLite over Postgres
 
-## What I cut and why
+SQLite requires zero infrastructure — no connection string, no hosted instance, no environment variable management for reviewers. For a single-server app at this scale, it's the right call. The schema is straightforward: `users`, `documents`, `document_shares`. Migrating to Postgres later would require only a driver swap and minor query adjustments since I avoided SQLite-specific syntax.
 
-| Cut | Reason |
-|-----|--------|
-| Registration flow | Two seeded accounts cover the sharing demo without adding auth complexity |
-| Role-based permissions | Owner vs collaborator distinction is clear; full RBAC would require a permissions table and UI that doesn't fit the timebox |
-| Real-time collab (WebSockets) | Out of scope for 4-6 hours; auto-save gives "last writer wins" which is sufficient for a demo |
-| Export to PDF | Nice stretch goal, deprioritized to ship solid core |
-| Conflict resolution / versioning | No version history; last save wins |
+### Auth: Seeded users with JWT, no registration flow
 
-## File structure
+Building a registration flow would have consumed time without adding meaningful signal. Two seeded users (alice@test.com, bob@test.com) let reviewers immediately test the sharing flow without any setup friction. JWT tokens are stored in localStorage and sent as Bearer headers — standard, auditable, good enough for this scope.
+
+### Auto-save over manual save
+
+A manual save button introduces a failure mode: users lose work if they forget to click it. Auto-save every 2 seconds with a visible status indicator ("Saving..." → "Saved") is the more honest UX. It also demonstrates product thinking — the feature exists because it should, not because it was easy.
+
+### File Upload: .txt and .md only
+
+Parsing `.docx` reliably requires `mammoth` and adds non-trivial error handling. I scoped file upload to plaintext formats to keep the feature working end-to-end rather than partially supporting Word documents with edge case failures. The unsupported format error is surfaced clearly in the UI. I would add `.docx` support next.
+
+## What I Cut and Why
+
+| Feature | Why Cut |
+|---|---|
+| Real-time collaboration | WebSocket + operational transform adds 4+ hours of complexity for a demo feature. Not worth the tradeoff. |
+| Document version history | Requires either event sourcing or snapshot diffing — neither fits in this timebox cleanly. |
+| Role-based permissions (viewer vs. editor) | The current model (access = can edit) is honest about its simplicity. Adding roles without enforcing them in the UI would be worse than not having them. |
+| Rich commenting / suggestions | Out of scope. Would be the next meaningful feature after version history. |
+
+## What I Would Build Next (2–4 Hours)
+
+1. `.docx` import via `mammoth` — the scaffolding is already there
+2. Document version history — store snapshots on each save with a timestamp, show a simple diff view
+3. Richer sharing permissions — viewer vs. editor, with enforcement in the API middleware
+4. Export to Markdown — TipTap has a serializer that makes this straightforward
+
+## Schema
+
+```sql
+users (id, email, password_hash, created_at)
+documents (id, title, content, owner_id, created_at, updated_at)
+document_shares (id, document_id, shared_with_user_id, created_at)
+```
+
+## API Surface
 
 ```
-docuflow/
-  server/
-    db/schema.js          SQLite setup + seeding
-    middleware/auth.js    JWT verification
-    routes/auth.js        POST /api/auth/login
-    routes/documents.js   CRUD + file upload
-    routes/shares.js      Share management (nested under documents/:id)
-    tests/share.test.js   node:test integration tests
-    index.js              Express app + error handler
-  client/
-    src/
-      api.js              Fetch wrapper with auth headers
-      App.jsx             Root: auth gate, doc list, active doc state
-      components/
-        Login.jsx         Login form with demo account buttons
-        Sidebar.jsx       Doc list (owned + shared), upload button
-        Editor.jsx        TipTap editor, toolbar, auto-save, title rename
-        SharePanel.jsx    Share modal: add/remove collaborators
-    vite.config.js        Proxy /api → localhost:3001
+POST   /api/auth/login
+GET    /api/documents            — owned + shared docs for current user
+POST   /api/documents            — create new doc
+GET    /api/documents/:id        — fetch single doc
+PUT    /api/documents/:id        — update title or content
+POST   /api/documents/:id/share  — grant access to another user
+GET    /api/documents/:id/shares — list who has access
+POST   /api/upload               — upload .txt or .md, returns new document
 ```

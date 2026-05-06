@@ -12,7 +12,7 @@
 | `SUBMISSION.md` | This file |
 
 ## Live deployment
-_TBD — add Render/Railway URL here after deploy_
+**https://ajaia-production-9b47.up.railway.app**
 
 ## Test credentials
 
@@ -37,8 +37,7 @@ _TBD — add Render/Railway URL here after deploy_
 
 ## What is incomplete / would build next
 
-- **Deployment URL** — needs a Render/Railway deployment (15 min task, not done within timebox)
-- **Walkthrough video** — record after deployment
+- **Walkthrough video** — link to be added after recording
 - **Document version history** — would store snapshots in a `document_versions` table on each save
 - **Real-time collaboration** — would add Socket.IO with a shared document state broadcast
 - **Export to Markdown/PDF** — TipTap has a Markdown serializer; PDF would use a headless browser
